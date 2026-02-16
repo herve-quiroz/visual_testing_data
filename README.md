@@ -1,1 +1,3 @@
-# Visual Testing Data\n\nArtefacts for visual testing from various projects.
+# Visual Testing Data
+
+Artefacts for visual testing from various projects.

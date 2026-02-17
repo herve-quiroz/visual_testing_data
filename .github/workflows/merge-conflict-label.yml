@@ -1,0 +1,155 @@
+name: Merge Conflict Label
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  schedule:
+    # Run every 4 hours to catch conflicts from base branch changes
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  manage-merge-conflicts:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Check for merge conflicts and update labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Function to update merge-conflict label
+            async function updateMergeConflictLabel(prNumber, hasConflict, currentLabels) {
+              const hasLabel = currentLabels.includes('merge-conflict');
+
+              if (hasConflict && !hasLabel) {
+                // Add label - PR has conflicts
+                try {
+                  await github.rest.issues.addLabels({
+                    owner,
+                    repo,
+                    issue_number: prNumber,
+                    labels: ['merge-conflict']
+                  });
+                  console.log(`✓ Added 'merge-conflict' label to PR #${prNumber}`);
+                } catch (error) {
+                  console.log(`✗ Failed to add 'merge-conflict' label to PR #${prNumber}: ${error.message}`);
+                }
+
+                // Remove 'input required' label if present - merge conflicts can be resolved autonomously
+                if (currentLabels.includes('input required')) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner,
+                      repo,
+                      issue_number: prNumber,
+                      name: 'input required'
+                    });
+                    console.log(`✓ Removed 'input required' label from PR #${prNumber} (merge conflicts take priority)`);
+                  } catch (error) {
+                    if (error.status !== 404) {
+                      console.log(`✗ Failed to remove 'input required' label from PR #${prNumber}: ${error.message}`);
+                    }
+                  }
+                }
+              } else if (!hasConflict && hasLabel) {
+                // Remove label - PR conflicts resolved
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: prNumber,
+                    name: 'merge-conflict'
+                  });
+                  console.log(`✓ Removed 'merge-conflict' label from PR #${prNumber}`);
+                } catch (error) {
+                  // Ignore errors if label doesn't exist
+                  if (error.status !== 404) {
+                    console.log(`✗ Failed to remove 'merge-conflict' label from PR #${prNumber}: ${error.message}`);
+                  }
+                }
+              }
+              // If label state is already correct, do nothing (silent)
+            }
+
+            // Main processing logic
+            console.log('Starting merge conflict check...');
+
+            // Get all open PRs with 'claude' label
+            const { data: allPRs } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            // Filter for PRs with 'claude' label
+            const claudePRs = allPRs.filter(pr =>
+              pr.labels.some(label => label.name === 'claude')
+            );
+
+            console.log(`Found ${claudePRs.length} open PRs with 'claude' label`);
+
+            // Helper to fetch PR mergeable state with retries for 'unknown'
+            async function getMergeableState(prNumber, maxRetries = 5, delayMs = 3000) {
+              for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                const { data: prDetails } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: prNumber
+                });
+
+                if (prDetails.mergeable_state !== 'unknown') {
+                  return prDetails;
+                }
+
+                if (attempt < maxRetries) {
+                  console.log(`  Mergeable state is 'unknown' (attempt ${attempt}/${maxRetries}), retrying in ${delayMs / 1000}s...`);
+                  await new Promise(resolve => setTimeout(resolve, delayMs));
+                } else {
+                  console.log(`  Mergeable state still 'unknown' after ${maxRetries} attempts, skipping`);
+                  return prDetails;
+                }
+              }
+            }
+
+            // Process each PR
+            for (const pr of claudePRs) {
+              console.log(`\nProcessing PR #${pr.number}: ${pr.title}`);
+
+              try {
+                // Get full PR details with retry for 'unknown' mergeable state
+                const prDetails = await getMergeableState(pr.number);
+
+                // Check mergeable_state
+                // Possible values: 'clean', 'unstable', 'dirty', 'draft', 'unknown'
+                // 'dirty' means merge conflicts exist
+                const mergeableState = prDetails.mergeable_state;
+                const hasConflict = mergeableState === 'dirty';
+
+                console.log(`  Mergeable state: ${mergeableState}`);
+                console.log(`  Has conflict: ${hasConflict}`);
+
+                // Get current labels
+                const currentLabels = prDetails.labels.map(l => l.name);
+
+                // Update label
+                await updateMergeConflictLabel(pr.number, hasConflict, currentLabels);
+              } catch (error) {
+                // Handle transient GitHub API errors gracefully
+                console.log(`✗ Failed to process PR #${pr.number}: ${error.message}`);
+                console.log(`  This may be a transient API error. The PR will be checked again on the next run.`);
+                // Continue processing other PRs instead of failing the entire workflow
+                continue;
+              }
+            }
+
+            console.log('\n✓ Merge conflict check complete');

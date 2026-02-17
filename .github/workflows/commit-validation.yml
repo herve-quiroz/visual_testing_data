@@ -1,0 +1,67 @@
+name: Commit Message Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-commits:
+    runs-on: ubuntu-latest
+    name: Validate commit messages
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history
+
+    - name: Check for Co-Authored-By in commit messages
+      run: |
+        echo "Checking commit messages for Co-Authored-By attribution..."
+
+        # For pull requests, check commits in the PR
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          # Get the range of commits in this PR
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          COMMIT_RANGE="${BASE_SHA}..${HEAD_SHA}"
+        else
+          # For direct pushes, check the pushed commits
+          COMMIT_RANGE="${{ github.event.before }}..${{ github.event.after }}"
+        fi
+
+        echo "Checking commits in range: $COMMIT_RANGE"
+
+        # Check each commit message
+        FOUND_VIOLATIONS=false
+        while IFS= read -r commit; do
+          if [ -n "$commit" ]; then
+            echo "Checking commit: $commit"
+            COMMIT_MSG=$(git log --format=%B -n 1 "$commit")
+            if echo "$COMMIT_MSG" | grep -q "Co-Authored-By:"; then
+              echo "❌ ERROR: Commit $commit contains 'Co-Authored-By:' which violates repository policy"
+              echo "Commit message:"
+              echo "$COMMIT_MSG"
+              echo "---"
+              FOUND_VIOLATIONS=true
+            fi
+          fi
+        done < <(git rev-list "$COMMIT_RANGE")
+
+        if [ "$FOUND_VIOLATIONS" = "true" ]; then
+          echo ""
+          echo "❌ VALIDATION FAILED"
+          echo "One or more commits contain 'Co-Authored-By:' attribution."
+          echo "This violates the repository policy documented in CLAUDE.md."
+          echo ""
+          echo "Please:"
+          echo "1. Remove the Co-Authored-By lines from your commit messages"
+          echo "2. Use 'git commit --amend' for the latest commit, or"
+          echo "3. Use 'git rebase -i' to edit older commits"
+          echo "4. Force push your changes: 'git push --force-with-lease'"
+          exit 1
+        else
+          echo "✅ All commit messages are valid"
+        fi

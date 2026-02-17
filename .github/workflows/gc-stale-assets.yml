@@ -1,0 +1,157 @@
+name: GC Stale Branch Assets
+
+on:
+  schedule:
+    # Run weekly on Sundays at 3:00 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (log deletions without actually deleting)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  gc-stale-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean up stale branch assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+
+          REPO="${{ github.repository }}"
+          deleted_count=0
+          skipped_count=0
+          kept_count=0
+
+          echo "=== GC Stale Branch Assets ==="
+          echo "Repository: $REPO"
+          echo "Dry run: $DRY_RUN"
+          echo ""
+
+          # Project configuration: maps release tags to source repos
+          # Each line: <release-tag> <source-repo-owner/name>
+          # Add new projects here as they onboard
+          PROJECTS=(
+            "nrg-visual-tests herve-quiroz/nrg"
+          )
+
+          for project_config in "${PROJECTS[@]}"; do
+            release_tag="${project_config%% *}"
+            source_repo="${project_config##* }"
+
+            echo "--- Processing release: $release_tag (source: $source_repo) ---"
+
+            # Get all assets for this release
+            assets=$(gh release view "$release_tag" \
+              --repo "$REPO" \
+              --json assets \
+              --jq '.assets[] | "\(.name)\t\(.id)"' 2>/dev/null) || {
+              echo "  Release '$release_tag' not found, skipping"
+              continue
+            }
+
+            if [ -z "$assets" ]; then
+              echo "  No assets found"
+              continue
+            fi
+
+            # Collect open PR branch names from source repo
+            open_branches=$(gh pr list \
+              --repo "$source_repo" \
+              --state open \
+              --json headRefName \
+              --jq '.[].headRefName' 2>/dev/null) || {
+              echo "  WARNING: Could not fetch open PRs from $source_repo, skipping release"
+              continue
+            }
+
+            echo "  Open PR branches in $source_repo: $(echo "$open_branches" | wc -w | tr -d ' ')"
+
+            while IFS=$'\t' read -r asset_name asset_id; do
+              # Extract branch name from asset filename
+              # Asset pattern: {prefix}_{branch}.{ext}
+              # Branch names use _ as separator in the filename
+              # The branch is the portion after the last known prefix segment and before the extension
+              #
+              # For videos: rts_scene_{branch}.mp4
+              # For screenshots: screenshot_rts_TestScene_{frame}_{duration}_{branch}.png
+              #
+              # Strategy: strip the extension, then extract the branch suffix.
+              # The branch name is the last underscore-separated segment that isn't part of the
+              # known prefix pattern. For main, this is simply "main".
+              # For feature branches like "my-feature", the branch in filenames uses _ for -,
+              # but we need to match against the actual branch name.
+              #
+              # Simplified approach: strip extension and known prefixes to get the branch portion.
+              basename_no_ext="${asset_name%.*}"
+
+              # Determine the branch portion based on known asset prefixes
+              branch=""
+              if [[ "$basename_no_ext" =~ ^rts_scene_(.+)$ ]]; then
+                branch="${BASH_REMATCH[1]}"
+              elif [[ "$basename_no_ext" =~ ^screenshot_rts_TestScene_[0-9]+_[0-9]+[a-z]*_(.+)$ ]]; then
+                branch="${BASH_REMATCH[1]}"
+              else
+                echo "  SKIP (unknown pattern): $asset_name"
+                skipped_count=$((skipped_count + 1))
+                continue
+              fi
+
+              # Never delete main branch assets
+              if [ "$branch" = "main" ]; then
+                echo "  KEEP (main): $asset_name"
+                kept_count=$((kept_count + 1))
+                continue
+              fi
+
+              # Convert branch name from filename format back to git branch format
+              # In filenames, branch separators are _, but actual branch names use - or /
+              # We need to check multiple possible branch name formats
+              branch_found=false
+              if [ -n "$open_branches" ]; then
+                while IFS= read -r pr_branch; do
+                  # Normalize branch name: replace / and - with _ for comparison
+                  normalized_pr_branch="${pr_branch//\//_}"
+                  normalized_pr_branch="${normalized_pr_branch//-/_}"
+                  if [ "$branch" = "$normalized_pr_branch" ]; then
+                    branch_found=true
+                    break
+                  fi
+                done <<< "$open_branches"
+              fi
+
+              if [ "$branch_found" = true ]; then
+                echo "  KEEP (active PR): $asset_name (branch: $branch)"
+                kept_count=$((kept_count + 1))
+              else
+                if [ "$DRY_RUN" = "true" ]; then
+                  echo "  WOULD DELETE: $asset_name (branch: $branch, no open PR)"
+                else
+                  echo "  DELETE: $asset_name (branch: $branch, no open PR)"
+                  gh release delete-asset "$release_tag" \
+                    --repo "$REPO" \
+                    --pattern "$asset_name" \
+                    --yes
+                fi
+                deleted_count=$((deleted_count + 1))
+              fi
+            done <<< "$assets"
+
+            echo ""
+          done
+
+          echo "=== Summary ==="
+          echo "Deleted: $deleted_count"
+          echo "Kept: $kept_count"
+          echo "Skipped (unknown pattern): $skipped_count"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "(Dry run - no assets were actually deleted)"
+          fi

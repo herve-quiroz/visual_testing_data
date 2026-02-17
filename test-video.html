@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visual Test Video</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            max-width: 1280px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        video {
+            width: 50%;
+            max-width: 640px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #000;
+        }
+        .info {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info p {
+            margin: 8px 0;
+        }
+        .error {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff;
+            border-left: 4px solid #e74c3c;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            color: #c0392b;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="page-title">Visual Test - Latest Run</h1>
+    <div class="info" id="info-section">
+        <p id="branch-info"><strong>Auto-generated video from the latest main branch build</strong></p>
+        <p>Duration: 10 seconds | FPS: 25 | Resolution: 800x600</p>
+        <p id="links"></p>
+    </div>
+    <video id="test-video" controls>
+        <source id="video-source" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const project = urlParams.get('project') || 'nrg';
+        const branch = urlParams.get('branch') || 'main';
+
+        const RELEASE_TAG = `${project}-visual-tests`;
+        const RELEASE_BASE = `https://github.com/herve-quiroz/visual_testing_data/releases/download/${RELEASE_TAG}`;
+        const PROJECT_REPO = `https://github.com/herve-quiroz/${project}`;
+
+        // Branch names use _ as separator (e.g., claude_fix-375)
+        const displayBranch = branch.replace(/_/g, '/');
+
+        // Set video source from GitHub Release URL
+        const videoSource = `${RELEASE_BASE}/rts_scene_${branch}.mp4`;
+        const videoElement = document.getElementById('test-video');
+        const sourceElement = document.getElementById('video-source');
+
+        sourceElement.src = videoSource;
+        videoElement.load();
+
+        // Update page title
+        document.getElementById('page-title').textContent =
+            `${project.toUpperCase()} Visual Test - Branch: ${displayBranch}`;
+
+        // Update branch info
+        const branchInfo = document.getElementById('branch-info');
+        if (branch === 'main') {
+            branchInfo.innerHTML = `<strong>Auto-generated video from the latest ${project} main branch build</strong>`;
+        } else {
+            branchInfo.innerHTML = `<strong>Auto-generated video from ${project} branch: ${displayBranch}</strong>`;
+        }
+
+        // Update links
+        document.getElementById('links').innerHTML =
+            `<a href="${PROJECT_REPO}">Project repository</a> | ` +
+            `<a href="https://github.com/herve-quiroz/visual_testing_data/releases/tag/${RELEASE_TAG}">All test videos</a> | ` +
+            `<a href="https://github.com/herve-quiroz/visual_testing_data">Visual testing data</a>`;
+
+        // Handle video load errors
+        videoElement.addEventListener('error', function() {
+            const infoSection = document.getElementById('info-section');
+            infoSection.className = 'error';
+            infoSection.innerHTML =
+                `<p><strong>Video not available for ${project} branch: ${displayBranch}</strong></p>` +
+                `<p>The test video for this branch may not have been generated yet, or the branch may not have an open PR.</p>` +
+                `<p>Videos are typically available 5-6 minutes after pushing changes.</p>` +
+                `<p><a href="test-video.html?project=${encodeURIComponent(project)}">View main branch video instead</a></p>`;
+            videoElement.style.display = 'none';
+        }, true);
+    </script>
+</body>
+</html>

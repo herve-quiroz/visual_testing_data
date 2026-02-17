@@ -1,0 +1,166 @@
+name: Issue Dependencies
+
+on:
+  issues:
+    types: [opened, edited, closed, reopened, labeled]
+  issue_comment:
+    types: [created]
+  schedule:
+    # Run every 4 hours to catch any missed updates
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  manage-dependencies:
+    # Skip PR comments (issue_comment fires for both issues and PRs)
+    if: github.event_name != 'issue_comment' || !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Check dependencies for all claude issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Function to get native dependencies for an issue
+            async function getNativeDependencies(issueNumber) {
+              try {
+                const { data: blockedBy } = await github.request(
+                  'GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by',
+                  { owner, repo, issue_number: issueNumber }
+                );
+                return blockedBy.map(dep => ({
+                  number: dep.number,
+                  state: dep.state
+                }));
+              } catch (error) {
+                // If dependencies API fails, return empty array
+                console.log(`Warning: Could not fetch dependencies for #${issueNumber}: ${error.message}`);
+                return [];
+              }
+            }
+
+            // Function to check if all dependencies are closed
+            function checkDependencies(dependencies) {
+              if (dependencies.length === 0) {
+                return { allClosed: true, openDeps: [], closedDeps: [] };
+              }
+
+              const openDeps = dependencies.filter(d => d.state === 'open').map(d => d.number);
+              const closedDeps = dependencies.filter(d => d.state === 'closed').map(d => d.number);
+
+              return {
+                allClosed: openDeps.length === 0,
+                openDeps,
+                closedDeps
+              };
+            }
+
+            // Function to update issue labels
+            async function updateIssueLabels(issueNumber, shouldBeReady, currentLabels) {
+              const hasReady = currentLabels.includes('ready');
+              const hasBlocked = currentLabels.includes('blocked');
+
+              let labelsToAdd = [];
+              let labelsToRemove = [];
+
+              if (shouldBeReady) {
+                if (!hasReady) labelsToAdd.push('ready');
+                if (hasBlocked) labelsToRemove.push('blocked');
+              } else {
+                if (!hasBlocked) labelsToAdd.push('blocked');
+                if (hasReady) labelsToRemove.push('ready');
+              }
+
+              // Add labels
+              if (labelsToAdd.length > 0) {
+                try {
+                  await github.rest.issues.addLabels({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    labels: labelsToAdd
+                  });
+                  console.log(`✓ Added labels to #${issueNumber}: ${labelsToAdd.join(', ')}`);
+                } catch (error) {
+                  console.log(`✗ Failed to add labels to #${issueNumber}: ${error.message}`);
+                }
+              }
+
+              // Remove labels
+              for (const label of labelsToRemove) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    name: label
+                  });
+                  console.log(`✓ Removed label from #${issueNumber}: ${label}`);
+                } catch (error) {
+                  // Ignore errors if label doesn't exist
+                  if (error.status !== 404) {
+                    console.log(`✗ Failed to remove label from #${issueNumber}: ${error.message}`);
+                  }
+                }
+              }
+            }
+
+            // Main processing logic
+            console.log('Starting dependency check using native GitHub dependencies...');
+
+            // Get all open issues (paginate to get all)
+            let allIssues = [];
+            let page = 1;
+            while (true) {
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+                page: page
+              });
+              if (issues.length === 0) break;
+              allIssues = allIssues.concat(issues);
+              if (issues.length < 100) break;
+              page++;
+            }
+
+            console.log(`Found ${allIssues.length} open issues`);
+
+            // Process each issue
+            for (const issue of allIssues) {
+              // Skip pull requests (they show up in the issues API)
+              if (issue.pull_request) {
+                console.log(`\nSkipping PR #${issue.number}: ${issue.title}`);
+                continue;
+              }
+
+              console.log(`\nProcessing issue #${issue.number}: ${issue.title}`);
+
+              // Get native dependencies
+              const dependencies = await getNativeDependencies(issue.number);
+              console.log(`  Dependencies: ${dependencies.length > 0 ? dependencies.map(d => `#${d.number} (${d.state})`).join(', ') : 'none'}`);
+
+              // Check dependency status
+              const depStatus = checkDependencies(dependencies);
+              console.log(`  Status: ${depStatus.allClosed ? 'ready' : 'blocked'}`);
+
+              if (dependencies.length > 0) {
+                console.log(`    Open: ${depStatus.openDeps.length}, Closed: ${depStatus.closedDeps.length}`);
+              }
+
+              // Get current labels
+              const currentLabels = issue.labels.map(l => l.name);
+
+              // Update labels
+              await updateIssueLabels(issue.number, depStatus.allClosed, currentLabels);
+            }
+
+            console.log('\n✓ Dependency check complete');

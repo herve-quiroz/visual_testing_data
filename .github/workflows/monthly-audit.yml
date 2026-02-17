@@ -1,0 +1,140 @@
+name: Monthly Workflow Audit
+
+on:
+  schedule:
+    # Run at midnight on the first day of each month
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+    # Allow manual triggering for testing and ad-hoc reviews
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  create-audit-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Calculate review period
+        id: period
+        run: |
+          # Calculate previous month start and end dates
+          # Get first day of previous month
+          start_date=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m-%d)
+          # Get last day of previous month (day before first of current month)
+          end_date=$(date -d "$(date +%Y-%m-01) -1 day" +%Y-%m-%d)
+          # Get month name and year for title
+          month_year=$(date -d "$start_date" +"%B %Y")
+
+          echo "start_date=$start_date" >> $GITHUB_OUTPUT
+          echo "end_date=$end_date" >> $GITHUB_OUTPUT
+          echo "month_year=$month_year" >> $GITHUB_OUTPUT
+
+      - name: Gather repository activity
+        id: activity
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          start="${{ steps.period.outputs.start_date }}"
+          end="${{ steps.period.outputs.end_date }}"
+
+          # Count PRs merged in period
+          prs_merged=$(gh pr list --state merged --search "merged:$start..$end" --json number --jq 'length')
+
+          # Count issues closed in period
+          issues_closed=$(gh issue list --state closed --search "closed:$start..$end" --json number --jq 'length')
+
+          # Count Claude-labeled PRs created in period
+          claude_prs=$(gh pr list --state all --label claude --search "created:$start..$end" --json number --jq 'length')
+
+          # Count Claude-labeled issues created in period
+          claude_issues=$(gh issue list --state all --label claude --search "created:$start..$end" --json number --jq 'length')
+
+          # Count PRs closed without merging (failed attempts) with claude label
+          failed_prs=$(gh pr list --state closed --label claude --search "created:$start..$end is:unmerged" --json number --jq 'length')
+
+          echo "prs_merged=$prs_merged" >> $GITHUB_OUTPUT
+          echo "issues_closed=$issues_closed" >> $GITHUB_OUTPUT
+          echo "claude_prs=$claude_prs" >> $GITHUB_OUTPUT
+          echo "claude_issues=$claude_issues" >> $GITHUB_OUTPUT
+          echo "failed_prs=$failed_prs" >> $GITHUB_OUTPUT
+
+      - name: Create audit issue
+        id: create_issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create issue body
+          cat > issue_body.md << 'EOF'
+          # Monthly Workflow Audit - ${{ steps.period.outputs.month_year }}
+
+          **Review Period:** ${{ steps.period.outputs.start_date }} to ${{ steps.period.outputs.end_date }}
+
+          ## Repository Activity Summary
+
+          - PRs merged: ${{ steps.activity.outputs.prs_merged }}
+          - Issues closed: ${{ steps.activity.outputs.issues_closed }}
+          - Claude-labeled PRs: ${{ steps.activity.outputs.claude_prs }}
+          - Claude-labeled issues: ${{ steps.activity.outputs.claude_issues }}
+          - Failed PR attempts: ${{ steps.activity.outputs.failed_prs }}
+
+          ## Audit Tasks
+
+          Please analyze the repository activity from the review period and provide:
+
+          1. **Pattern Analysis**: Identify common failure patterns or workflow bottlenecks
+             - Review Claude-labeled PRs and issues that were closed/merged
+             - Identify any PRs that required multiple attempts or significant rework
+             - Note recurring errors in Discord notifications or GitHub Actions logs
+
+          2. **Feature Discovery**: Search for new GitHub/Claude Code features that could improve our workflow
+             - Check GitHub changelog for new features released in the review period
+             - Review GitHub blog for API updates
+             - Search for Claude Code release notes and new capabilities
+             - Review past monthly audit issues to identify previously suggested ideas
+               - Only revisit unimplemented suggestions if circumstances have changed
+               - Note the original rationale for not implementing and any new factors
+             - Example: GitHub issue relationships feature (migrated August 2025) replaced custom dependency workflow
+
+          3. **Workflow Improvement Suggestions**: Recommend specific changes to:
+             - Instructions (`CLAUDE.md`)
+             - Scripts (`util/*`, `scripts/*`)
+             - GitHub Actions workflows (`.github/workflows/*`)
+             - Labels and issue templates
+
+          4. **Success Reference**: Review the successful manual audit example (nrg#290) for inspiration
+
+          ## Deliverables
+
+          - Post analysis as comment on this issue
+          - If no improvements needed, close this issue
+          - If improvements suggested, keep issue open for human review
+          - Once human approves suggestions, human will remove `discuss` label → Claude can implement changes
+
+          ---
+          Reference: #134
+          EOF
+
+          # Create the issue
+          issue_number=$(gh issue create \
+            --title "Monthly Workflow Audit - ${{ steps.period.outputs.month_year }}" \
+            --body-file issue_body.md \
+            --label "claude,discuss" \
+            --json number \
+            --jq '.number')
+
+          echo "issue_number=$issue_number" >> $GITHUB_OUTPUT
+
+      - name: Post initial comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ steps.create_issue.outputs.issue_number }} --body "Monthly audit issue created. Please review the repository activity summary above and follow the audit tasks.
+
+          When ready, Claude will analyze the activity and post findings as a comment.
+
+          ---
+          ✨ Content generated by Claude AI."

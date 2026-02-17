@@ -1,0 +1,73 @@
+name: Auto-Label Claude PRs
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Auto-add claude label to Claude PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request.number;
+
+            console.log(`Checking PR #${prNumber} for Claude detection...`);
+
+            // Get PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+
+            // Check if already has claude label
+            const hasClaudeLabel = pr.labels.some(label => label.name === 'claude');
+            if (hasClaudeLabel) {
+              console.log(`✓ PR #${prNumber} already has 'claude' label`);
+              return;
+            }
+
+            // Detection method 1: Check branch name
+            const isClaudeBranch = pr.head.ref.startsWith('claude/');
+            console.log(`  Branch name: ${pr.head.ref}`);
+            console.log(`  Is Claude branch: ${isClaudeBranch}`);
+
+            // Detection method 2: Check commit authors
+            const { data: commits } = await github.rest.pulls.listCommits({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+
+            const hasClaudeCommit = commits.some(c =>
+              c.commit.author.email === 'herve.quiroz+claude@gmail.com'
+            );
+            console.log(`  Has Claude commit: ${hasClaudeCommit}`);
+
+            // Add label if detected by either method
+            if (isClaudeBranch || hasClaudeCommit) {
+              const detectionMethod = isClaudeBranch ? 'branch name' : 'commit author';
+              console.log(`✓ Detected Claude PR by ${detectionMethod}`);
+
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: prNumber,
+                labels: ['claude']
+              });
+
+              console.log(`✓ Added 'claude' label to PR #${prNumber}`);
+            } else {
+              console.log(`  Not a Claude PR - no label added`);
+            }

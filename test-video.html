@@ -51,24 +51,51 @@
         a:hover {
             text-decoration: underline;
         }
+        .scene-list {
+            margin: 20px 0;
+        }
+        .scene-list h2 {
+            color: #2c3e50;
+            font-size: 1.2em;
+        }
+        .scene-list ul {
+            list-style: none;
+            padding: 0;
+        }
+        .scene-list li {
+            margin: 8px 0;
+            padding: 10px 15px;
+            background: #fff;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .scene-list li a {
+            font-weight: 500;
+        }
+        .loading {
+            color: #7f8c8d;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
     <h1 id="page-title">Visual Test - Latest Run</h1>
     <div class="info" id="info-section">
         <p id="branch-info"><strong>Auto-generated video from the latest main branch build</strong></p>
-        <p>Duration: 10 seconds | FPS: 25 | Resolution: 800x600</p>
+        <p id="video-details">Duration: 10 seconds | FPS: 25 | Resolution: 800x600</p>
         <p id="links"></p>
     </div>
-    <video id="test-video" controls>
+    <video id="test-video" controls style="display:none">
         <source id="video-source" type="video/mp4">
         Your browser does not support the video tag.
     </video>
+    <div id="scene-list-section" class="scene-list" style="display:none"></div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const project = urlParams.get('project') || 'nrg';
         const branch = urlParams.get('branch') || 'main';
+        const scene = urlParams.get('scene');
 
         const RELEASE_TAG = `${project}-visual-tests`;
         const RELEASE_BASE = `https://github.com/herve-quiroz/visual_testing_data/releases/download/${RELEASE_TAG}`;
@@ -77,43 +104,93 @@
         // Branch names use _ as separator (e.g., claude_fix-375)
         const displayBranch = branch.replace(/_/g, '/');
 
-        // Set video source from GitHub Release URL
-        const videoSource = `${RELEASE_BASE}/rts_scene_${branch}.mp4`;
-        const videoElement = document.getElementById('test-video');
-        const sourceElement = document.getElementById('video-source');
-
-        sourceElement.src = videoSource;
-        videoElement.load();
-
-        // Update page title
-        document.getElementById('page-title').textContent =
-            `${project.toUpperCase()} Visual Test - Branch: ${displayBranch}`;
-
-        // Update branch info
-        const branchInfo = document.getElementById('branch-info');
-        if (branch === 'main') {
-            branchInfo.innerHTML = `<strong>Auto-generated video from the latest ${project} main branch build</strong>`;
-        } else {
-            branchInfo.innerHTML = `<strong>Auto-generated video from ${project} branch: ${displayBranch}</strong>`;
-        }
-
         // Update links
         document.getElementById('links').innerHTML =
             `<a href="${PROJECT_REPO}">Project repository</a> | ` +
             `<a href="https://github.com/herve-quiroz/visual_testing_data/releases/tag/${RELEASE_TAG}">All test videos</a> | ` +
             `<a href="https://github.com/herve-quiroz/visual_testing_data">Visual testing data</a>`;
 
-        // Handle video load errors
-        videoElement.addEventListener('error', function() {
-            const infoSection = document.getElementById('info-section');
-            infoSection.className = 'error';
-            infoSection.innerHTML =
-                `<p><strong>Video not available for ${project} branch: ${displayBranch}</strong></p>` +
-                `<p>The test video for this branch may not have been generated yet, or the branch may not have an open PR.</p>` +
-                `<p>Videos are typically available 5-6 minutes after pushing changes.</p>` +
-                `<p><a href="test-video.html?project=${encodeURIComponent(project)}">View main branch video instead</a></p>`;
-            videoElement.style.display = 'none';
-        }, true);
+        if (scene) {
+            // Scene specified: show the video player
+            const videoSource = `${RELEASE_BASE}/${scene}_${branch}.mp4`;
+            const videoElement = document.getElementById('test-video');
+            const sourceElement = document.getElementById('video-source');
+
+            videoElement.style.display = '';
+            sourceElement.src = videoSource;
+            videoElement.load();
+
+            // Update page title
+            document.getElementById('page-title').textContent =
+                `${project.toUpperCase()} Visual Test - ${scene} (${displayBranch})`;
+
+            // Update branch info
+            const branchInfo = document.getElementById('branch-info');
+            if (branch === 'main') {
+                branchInfo.innerHTML = `<strong>Scene: ${scene} — from the latest ${project} main branch build</strong>`;
+            } else {
+                branchInfo.innerHTML = `<strong>Scene: ${scene} — from ${project} branch: ${displayBranch}</strong>`;
+            }
+
+            // Handle video load errors
+            videoElement.addEventListener('error', function() {
+                const infoSection = document.getElementById('info-section');
+                infoSection.className = 'error';
+                infoSection.innerHTML =
+                    `<p><strong>Video not available for ${project} scene "${scene}" on branch: ${displayBranch}</strong></p>` +
+                    `<p>The test video for this scene/branch may not have been generated yet, or the branch may not have an open PR.</p>` +
+                    `<p>Videos are typically available 5-6 minutes after pushing changes.</p>` +
+                    `<p><a href="test-video.html?project=${encodeURIComponent(project)}&branch=${encodeURIComponent(branch)}">View available scenes</a> | ` +
+                    `<a href="test-video.html?project=${encodeURIComponent(project)}">View main branch scenes</a></p>`;
+                videoElement.style.display = 'none';
+            }, true);
+        } else {
+            // No scene specified: list available videos for this project/branch
+            document.getElementById('video-details').style.display = 'none';
+
+            document.getElementById('page-title').textContent =
+                `${project.toUpperCase()} Visual Tests - Branch: ${displayBranch}`;
+
+            const branchInfo = document.getElementById('branch-info');
+            branchInfo.innerHTML = `<strong>Available scenes for ${project} on branch: ${displayBranch}</strong>`;
+
+            const sceneListSection = document.getElementById('scene-list-section');
+            sceneListSection.style.display = '';
+            sceneListSection.innerHTML = '<p class="loading">Loading available scenes...</p>';
+
+            // Fetch release assets to find videos matching *_{branch}.mp4
+            const apiUrl = `https://api.github.com/repos/herve-quiroz/visual_testing_data/releases/tags/${RELEASE_TAG}`;
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) throw new Error(`Release not found (${response.status})`);
+                    return response.json();
+                })
+                .then(release => {
+                    const suffix = `_${branch}.mp4`;
+                    const scenes = release.assets
+                        .filter(asset => asset.name.endsWith(suffix))
+                        .map(asset => asset.name.slice(0, -suffix.length));
+
+                    if (scenes.length === 0) {
+                        sceneListSection.innerHTML =
+                            `<p>No videos found for branch <strong>${displayBranch}</strong>.</p>` +
+                            `<p>Videos are typically available 5-6 minutes after pushing changes.</p>`;
+                        return;
+                    }
+
+                    const listItems = scenes.map(name => {
+                        const url = `test-video.html?project=${encodeURIComponent(project)}&branch=${encodeURIComponent(branch)}&scene=${encodeURIComponent(name)}`;
+                        return `<li><a href="${url}">${name}</a></li>`;
+                    }).join('');
+
+                    sceneListSection.innerHTML = `<h2>Scenes (${scenes.length})</h2><ul>${listItems}</ul>`;
+                })
+                .catch(error => {
+                    sceneListSection.innerHTML =
+                        `<p>Could not load scene list: ${error.message}</p>` +
+                        `<p>Check the <a href="https://github.com/herve-quiroz/visual_testing_data/releases/tag/${RELEASE_TAG}">release page</a> for available videos.</p>`;
+                });
+        }
     </script>
 </body>
 </html>

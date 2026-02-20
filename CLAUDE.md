@@ -66,6 +66,10 @@ Only work on issues with the `claude` label and no open dependencies. The `find-
 * NEVER add the `claude` label on a Github issue yourself unless it's requested explicitly
 * NEVER work on an issue that depends on functionality added by another open issue
 
+## Issue Dependencies
+
+* Never use GitHub's sub-issue/parent-issue feature (addSubIssue/removeSubIssue). Use native blocked-by dependencies exclusively.
+
 ## Skill Creation
 
 When creating skills, invoke both `/skill-development` and `/skill-creator` for comprehensive coverage. They provide complementary guidance: `/skill-creator` covers core design principles and conciseness, while `/skill-development` covers writing style rules, trigger descriptions, and validation.

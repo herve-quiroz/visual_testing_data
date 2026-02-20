@@ -6,80 +6,13 @@
 
 ---
 
-* Use `Claude Code` as the Git user name and `herve.quiroz+claude@gmail.com` as the user email address.
-* Do not add a "Co-Authored-By:" entry in the commit messages.
-
 ## Commit Configuration
 
-**IMPORTANT**: Always use these exact values for commits:
-* Author Name: Claude Code
+* Author Name: `Claude Code`
 * Author Email: `herve.quiroz+claude@gmail.com`
+* Do NOT add a `Co-Authored-By:` line in commit messages
 
-⚠️ **Common Mistake**: Do NOT add `Co-Authored-By: Claude <noreply@anthropic.com>` in the commit message
-
-## Pre-Commit Checklist
-
-Before making any commits, verify:
-- [ ] Author email is `herve.quiroz+claude@gmail.com`
-- [ ] Branch name follows `claude/description` pattern
-- [ ] Commit message is descriptive
-- [ ] Commit message formatting is correct (no literal `\n` characters, proper line breaks)
-- [ ] All tests pass if applicable
-
-## Commit Message Validation
-
-When creating commit messages through the GitHub API, ensure:
-- [ ] Use actual newline characters, not escaped `\n` sequences
-- [ ] Multi-line messages have proper formatting
-- [ ] No visible `\n` characters appear in the final commit message
-- [ ] Message follows repository commit conventions
-- [ ] Do NOT add a `Co-Authored-By:` entry in the commit message
-
-**Example of correct multi-line commit message formatting:**
-```
-Add feature X to improve Y
-
-- Add new functionality for better user experience
-- Include proper error handling and validation
-- Update tests to cover new scenarios
-
-This change addresses the requirements outlined in issue #123
-and improves the overall reliability of the system.
-```
-
-## Branches
-
-* Branch naming: `claude/description`
-* When working on branch to address an issue: `claude/fix-<issue_number>` or `claude/issue-<issue_number>`
-
-## Pull requests
-
-* Pull requests should only be sent for review after all tests pass and quality checks succeed.
-* When checking for errors or warnings from Github actions, look into warnings that don't necessarily cause the action to fail.
-* Do not merge pull requests yourself. Pull requests should be approved by the owner of the repository.
-* Pull requests created by Claude should have the `claude` label.
-* Pull requests created to address a given issue should contain `fixes #123` (with the right issue number) in their descriptions so that merging the pull request automatically closes the issue. See [Linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) for details.
-
-### PR Description Template
-
-When creating a PR, include:
-- Summary of changes
-- Testing approach
-- Related issues (use `fixes #123` format)
-
-## Branch Management
-
-* ALWAYS create a new branch for each task/issue
-* NEVER reuse branches that have already been merged
-* Branch naming convention: `claude/issue-{issue-number}` or `claude/{descriptive-name}`
-* Before starting work, check out main and create a fresh branch from it
-
-## When working on a Github issue
-
-* Create a pull request with the branch naming convention above
-* Add the `claude` label to the pull request
-* Describe your approach in the pull request description
-* Make sure all tests pass and then mark the pull request as ready for review
+For branch naming, commit formatting, pre-commit checks, and PR conventions, see the `git-commit` skill.
 
 ## Comments (Github issues and pull requests)
 
@@ -126,95 +59,16 @@ When planning tasks, provide concrete implementation steps without time estimate
 
 * When removing logic, don't leave comments about it. If things don't exist, we don't need to mention them
 
-## Label-Based Work Control
+## Work Control
 
-### Required Labels for Claude Work
-- **`claude`** - Issue is assigned to Claude for implementation
-- **NOT `blocked`** - Issue dependencies are satisfied and work can begin
-
-### Blocked Label Usage
-The `blocked` label indicates that an issue has unmet dependencies and should not be worked on yet:
-
-- **NEVER work on issues with the `blocked` label**, even if they also have the `claude` label
-- Issues become unblocked when their dependencies are completed (dependencies will be listed in the issue description)
-- When checking for available work, use: `gh issue list --label claude --label "!blocked"`
-- If all `claude` issues are `blocked`, no work should be started - wait for dependencies to be completed
-
-### Dependency Management
-- Issues with dependencies will initially have both `claude` and `blocked` labels
-- When prerequisite issues are completed, the `blocked` label should be removed from dependent issues
-- This ensures proper ordering for complex features with multiple interdependent components
-
-## Creating and managing Github issues
+Only work on issues with the `claude` label and no open dependencies. The `find-work` skill handles task detection and priority routing.
 
 * NEVER add the `claude` label on a Github issue yourself unless it's requested explicitly
-* NEVER work on an issue that depends on functionality added by another open issue. Instead, skip it until the other issue is closed
+* NEVER work on an issue that depends on functionality added by another open issue
 
-## Special Issue Types
+## Skill Creation
 
-### Design Issues
-
-Issues labeled with `design` are for design discussions and planning, not immediate implementation.
-
-- **`design`** label indicates an issue is about discussing and documenting design decisions
-- Design issues focus on planning, architecture, and requirements gathering
-- Design work results in documentation updates, commits go directly to main (no PR needed)
-- Once design is finalized, implementation issues can be created based on the design decisions
-
-For detailed workflow steps, see the `find-work` skill's `references/design-workflow.md`.
-
-### Discuss Issues
-
-Issues labeled with `discuss` are for lightweight Q&A and clarification within the issue thread itself.
-
-- **`discuss`** label indicates an issue needs clarification before implementation
-- Discussion happens entirely within the issue (no code changes, no branches)
-- Claude updates the issue description and posts summary comments
-- Once `discuss` label is removed, the issue transitions to normal implementation
-
-For detailed workflow steps, see the `find-work` skill's `references/discuss-workflow.md`.
-
-### Documentation Issues (No Label Required)
-
-Some issues request documentation updates rather than code implementation. These can be identified by **signals in the issue title or body**, even without a special label.
-
-**Strong indicators (any one = treat as documentation issue):**
-
-1. **Title starts with:** `Design:` or `Plan:` (case-insensitive)
-2. **Body starts with:** `Doc:`, `Docs:`, `Document:`, or `Documents:` (case-insensitive) followed by a file path in backticks
-
-**Supporting indicators (consider in context):**
-
-3. Title contains words like "design", "document", "documentation", "spec", "specification", "plan", "planning"
-4. Body references markdown files (`.md`) as the primary subject
-5. Issue describes what to capture/record/document rather than what to build/implement
-
-**Behavior for documentation issues:**
-
-- The deliverable is **updating documentation**, not writing code
-- Look for the referenced doc file path (e.g., `` Doc: `doc/gameplay.md` ``) to know where changes go
-- If no explicit path, infer from context or ask for clarification
-- **Create a PR** with documentation changes (do NOT commit directly to main)
-- PR title and description should reflect documentation work, not implementation
-
-**When signals are ambiguous:**
-
-If an issue has mixed signals (e.g., title says "Design" but body describes implementation tasks), **post a clarifying comment** on the issue before starting work. Ask whether the expected deliverable is documentation updates or code implementation.
-
-**Examples:**
-
-| Issue Title | Body Starts With | Interpretation |
-|-------------|------------------|----------------|
-| "Design: equipment system" | `Doc: \`doc/gameplay.md\`` | Documentation issue |
-| "Plan: save game format" | `Documents: \`doc/serialization.md\`` | Documentation issue |
-| "Add inventory management" | Implementation details | Code implementation |
-| "Design: new feature" | Code snippets, no doc reference | Ambiguous - ask for clarification |
-
-### Label Precedence
-
-- **`blocked`** label always takes precedence - never work on blocked issues regardless of other labels
-- If an issue has both `discuss` and `design` labels, treat it as a `discuss` issue
-- Documentation issues (detected by title/body signals) take precedence over assuming code implementation
+When creating skills, invoke both `/skill-development` and `/skill-creator` for comprehensive coverage. They provide complementary guidance: `/skill-creator` covers core design principles and conciseness, while `/skill-development` covers writing style rules, trigger descriptions, and validation.
 
 ## Repository-Specific Guidelines
 

@@ -74,6 +74,14 @@ Only work on issues with the `claude` label and no open dependencies. The `find-
 
 When creating skills, invoke both `/skill-development` and `/skill-creator` for comprehensive coverage. They provide complementary guidance: `/skill-creator` covers core design principles and conciseness, while `/skill-development` covers writing style rules, trigger descriptions, and validation.
 
+## Interactive Mode Git Workflow
+
+When running in an interactive session (i.e., a user is directly interacting with Claude Code):
+- Work on the `main` branch directly — do not create feature branches
+- Commit and push changes directly to `main`
+- Only create a branch and PR when the user explicitly asks for one
+- If the task involves large or complex changes, ask the user whether they prefer a direct commit to `main` or a PR
+
 ## Repository-Specific Guidelines
 
 This repository contains artefacts for visual testing from various projects.

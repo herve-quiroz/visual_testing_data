@@ -118,13 +118,12 @@ jobs:
           Reference: #134
           EOF
 
-          # Create the issue
-          issue_number=$(gh issue create \
+          # Create the issue and extract number from the returned URL
+          issue_url=$(gh issue create \
             --title "Monthly Workflow Audit - ${{ steps.period.outputs.month_year }}" \
             --body-file issue_body.md \
-            --label "claude,discuss" \
-            --json number \
-            --jq '.number')
+            --label "claude,discuss")
+          issue_number=$(echo "$issue_url" | grep -o '[0-9]*$')
 
           echo "issue_number=$issue_number" >> $GITHUB_OUTPUT
 

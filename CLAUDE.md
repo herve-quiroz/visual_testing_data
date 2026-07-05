@@ -70,10 +70,6 @@ Only work on issues with the `claude` label and no open dependencies. The `find-
 
 * Never use GitHub's sub-issue/parent-issue feature (addSubIssue/removeSubIssue). Use native blocked-by dependencies exclusively.
 
-## Skill Creation
-
-When creating skills, invoke both `/skill-development` and `/skill-creator` for comprehensive coverage. They provide complementary guidance: `/skill-creator` covers core design principles and conciseness, while `/skill-development` covers writing style rules, trigger descriptions, and validation.
-
 ## Interactive Mode Git Workflow
 
 When running in an interactive session (i.e., a user is directly interacting with Claude Code):

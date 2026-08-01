@@ -21,7 +21,9 @@ jobs:
     steps:
       - name: Clean up stale branch assets
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The default GITHUB_TOKEN is scoped to this repository only, so it
+          # cannot read pull requests in the private source repositories.
+          GH_TOKEN: ${{ secrets.ASSET_GC_TOKEN || secrets.GITHUB_TOKEN }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
@@ -34,6 +36,7 @@ jobs:
           echo "=== GC Stale Branch Assets ==="
           echo "Repository: $REPO"
           echo "Dry run: $DRY_RUN"
+          failed_projects=0
           echo ""
 
           # Project configuration: maps release tags to source repos
@@ -68,8 +71,16 @@ jobs:
               --repo "$source_repo" \
               --state open \
               --json headRefName \
-              --jq '.[].headRefName' 2>/dev/null) || {
-              echo "  WARNING: Could not fetch open PRs from $source_repo, skipping release"
+              --jq '.[].headRefName') || {
+              # Previously this warned and continued, so the job exited zero
+              # and reported success while collecting nothing. It had never
+              # collected a single asset. A collector that cannot see the
+              # source repository is broken, not idle: say so.
+              echo "::error::Cannot read pull requests from $source_repo."
+              echo "This repository is public and $source_repo is private, so the default"
+              echo "GITHUB_TOKEN cannot see it. Set the ASSET_GC_TOKEN secret to a token with"
+              echo "read access to $source_repo, or remove $source_repo from PROJECTS."
+              failed_projects=$((failed_projects + 1))
               continue
             }
 
@@ -150,6 +161,10 @@ jobs:
 
           echo "=== Summary ==="
           echo "Deleted: $deleted_count"
+          if [ "${failed_projects:-0}" -gt 0 ]; then
+            echo "::error::$failed_projects project(s) could not be processed; see above."
+            exit 1
+          fi
           echo "Kept: $kept_count"
           echo "Skipped (unknown pattern): $skipped_count"
           if [ "$DRY_RUN" = "true" ]; then

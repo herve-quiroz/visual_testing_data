@@ -1,0 +1,20 @@
+name: Issue Dependencies
+
+on:
+  issues:
+    types: [opened, edited, closed, reopened]
+  issue_comment:
+    types: [created]
+  schedule:
+    # Run once daily to catch any missed updates
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  dependencies:
+    uses: trancecode/github-workflows/.github/workflows/issue-dependencies.yml@main

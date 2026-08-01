@@ -1,0 +1,19 @@
+name: Failing Checks Label
+
+on:
+  check_suite:
+    types: [completed]
+  schedule:
+    # Run once daily to catch any missed updates
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+permissions:
+  pull-requests: write
+  checks: read
+  contents: read
+
+jobs:
+  label:
+    uses: trancecode/github-workflows/.github/workflows/failing-checks-label.yml@main

@@ -30,11 +30,11 @@ last interaction was Claude-authored, and sets the `input required` label from t
 **Autonomous sessions** MUST add it to everything posted to GitHub: PR descriptions,
 issue descriptions, issue comments, PR comments, review responses.
 
-**Interactive sessions** (a user is directly driving Claude Code) MUST add it to PR and
-issue descriptions, and MUST NOT add it to issue comments or PR comments. A comment
-carrying the footer is read as agent output, so the workflow marks the item as awaiting a
-human and the autonomous agent then declines to act on it. A comment posted to prompt
-work would halt it instead.
+**Interactive sessions** (a user is directly driving Claude Code) MUST NOT add it
+anywhere: not to PR descriptions, not to issue descriptions, not to comments. What Claude
+files during an interactive session is the user's own work, and stamping it as agent
+output makes the workflow read the item as awaiting a human, so the autonomous agent
+declines to act on it. An issue or PR opened to prompt work would halt it instead.
 
 ## Planning without timelines
 

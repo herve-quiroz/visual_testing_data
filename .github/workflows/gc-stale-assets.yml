@@ -24,6 +24,7 @@ jobs:
           # The default GITHUB_TOKEN is scoped to this repository only, so it
           # cannot read pull requests in the private source repositories.
           GH_TOKEN: ${{ secrets.ASSET_GC_TOKEN || secrets.GITHUB_TOKEN }}
+          HAVE_GC_TOKEN: ${{ secrets.ASSET_GC_TOKEN != '' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
@@ -37,6 +38,7 @@ jobs:
           echo "Repository: $REPO"
           echo "Dry run: $DRY_RUN"
           failed_projects=0
+          skipped_projects=0
           echo ""
 
           # Project configuration: maps release tags to source repos
@@ -76,10 +78,26 @@ jobs:
               # and reported success while collecting nothing. It had never
               # collected a single asset. A collector that cannot see the
               # source repository is broken, not idle: say so.
+              # Two different situations, and conflating them is what made this
+              # workflow lie for months.
+              #
+              #   No ASSET_GC_TOKEN configured -> not set up yet. Say so and skip.
+              #     Failing here would leave main permanently red on a schedule for
+              #     something only a human can fix, and the autonomous agent would
+              #     churn on it. Tracked in issue #26.
+              #
+              #   Token configured but still refused -> genuinely broken. Fail.
+              if [ "${HAVE_GC_TOKEN:-false}" != "true" ]; then
+                echo "::warning::Skipping $source_repo: no ASSET_GC_TOKEN configured."
+                echo "This repository is public and $source_repo is private, so the default"
+                echo "GITHUB_TOKEN cannot read it. Nothing will be collected for this project"
+                echo "until the secret exists. See issue #26."
+                skipped_projects=$((skipped_projects + 1))
+                continue
+              fi
               echo "::error::Cannot read pull requests from $source_repo."
-              echo "This repository is public and $source_repo is private, so the default"
-              echo "GITHUB_TOKEN cannot see it. Set the ASSET_GC_TOKEN secret to a token with"
-              echo "read access to $source_repo, or remove $source_repo from PROJECTS."
+              echo "ASSET_GC_TOKEN is set but cannot read $source_repo. Check its scope, or"
+              echo "remove $source_repo from PROJECTS."
               failed_projects=$((failed_projects + 1))
               continue
             }
@@ -161,6 +179,9 @@ jobs:
 
           echo "=== Summary ==="
           echo "Deleted: $deleted_count"
+          if [ "${skipped_projects:-0}" -gt 0 ]; then
+            echo "::warning::$skipped_projects project(s) skipped for lack of ASSET_GC_TOKEN (issue #26)."
+          fi
           if [ "${failed_projects:-0}" -gt 0 ]; then
             echo "::error::$failed_projects project(s) could not be processed; see above."
             exit 1

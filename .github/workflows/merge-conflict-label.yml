@@ -5,9 +5,6 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches: [main]
-  schedule:
-    # Run once daily to catch conflicts from base branch changes
-    - cron: '0 6 * * *'
   workflow_dispatch:
     # Allow manual triggering
 

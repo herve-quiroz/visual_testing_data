@@ -3,9 +3,6 @@ name: Failing Checks Label
 on:
   check_suite:
     types: [completed]
-  schedule:
-    # Run once daily to catch any missed updates
-    - cron: '0 6 * * *'
   workflow_dispatch:
     # Allow manual triggering
 

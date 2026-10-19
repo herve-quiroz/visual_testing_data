@@ -11,9 +11,6 @@ on:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  schedule:
-    # Run once daily to catch any missed updates
-    - cron: '0 6 * * *'
   workflow_dispatch:
     # Allow manual triggering
 

@@ -83,8 +83,7 @@ jobs:
               #
               #   No ASSET_GC_TOKEN configured -> not set up yet. Say so and skip.
               #     Failing here would leave main permanently red on a schedule for
-              #     something only a human can fix, and the autonomous agent would
-              #     churn on it. Tracked in issue #26.
+              #     something only a human can fix. Tracked in issue #26.
               #
               #   Token configured but still refused -> genuinely broken. Fail.
               if [ "${HAVE_GC_TOKEN:-false}" != "true" ]; then
